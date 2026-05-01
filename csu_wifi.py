@@ -232,6 +232,13 @@ def print_portal_status(status, prefix="  ", include_message=False):
         print(f"{prefix}portal_message: {status['message']}")
 
 
+def looks_like_already_logged_in_message(message):
+    if not message:
+        return False
+    text = str(message)
+    return any(token in text for token in ("错误代码99", "IP已经在线", "已经在线", "终端IP已经在线"))
+
+
 def get_local_ip():
     """Get the local IP address used for WLAN."""
     try:
@@ -651,6 +658,19 @@ def cmd_connect(args):
         print(f"Error: Invalid ISP '{isp}'. Options: {', '.join(ISP_OPTIONS.keys())}")
         sys.exit(1)
 
+    current = portal_status(session)
+    if current["campus_auth"] == "logged_in":
+        print("Already authenticated:")
+        print_portal_status(current)
+        if args.save:
+            config = load_config()
+            config["username"] = username
+            config["password"] = password
+            config["isp"] = isp
+            save_config(config)
+            print(f"Saved credentials to {CONFIG_FILE}")
+        return
+
     print("Authenticating to CSU WiFi...")
     success, message = do_login(session, username, password, isp)
 
@@ -664,6 +684,21 @@ def cmd_connect(args):
             config["isp"] = isp
             save_config(config)
             print(f"Saved credentials to {CONFIG_FILE}")
+    elif looks_like_already_logged_in_message(message):
+        current = portal_status(session)
+        if current["campus_auth"] == "logged_in":
+            print("Already authenticated:")
+            print_portal_status(current)
+            if args.save:
+                config = load_config()
+                config["username"] = username
+                config["password"] = password
+                config["isp"] = isp
+                save_config(config)
+                print(f"Saved credentials to {CONFIG_FILE}")
+        else:
+            print(f"FAILED: {message}")
+            sys.exit(1)
     else:
         print(f"FAILED: {message}")
         sys.exit(1)
